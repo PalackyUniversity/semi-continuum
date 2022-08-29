@@ -5,7 +5,7 @@ class RetentionCurves:
     MAX_SATURATION = 0.999
     MIN_SATURATION = 0.001
 
-    def __curve(self, s: np.ndarray, a: np.ndarray) -> np.ndarray:
+    def __curve(self, s: np.ndarray, a: float) -> np.ndarray:
         """
         Logistic retention curve
 
@@ -29,16 +29,16 @@ class RetentionCurves:
 
         return pressure
 
-    def wet(self, s: np.ndarray, a: np.ndarray) -> np.ndarray:
+    def wet(self, s: np.ndarray, a: float) -> np.ndarray:
         """Logistic retention curve for the main wetting branch."""
         return self.__curve(s, a) - 700
 
-    def drain(self, s: np.ndarray, a: np.ndarray) -> np.ndarray:
+    def drain(self, s: np.ndarray, a: float) -> np.ndarray:
         """Logistic retention curve for the main draining branch."""
         return self.__curve(s, a) - 1300
 
     @staticmethod
-    def van_genuchten(s: np.ndarray, alfa, n, a: np.ndarray, rho, g: float) -> np.ndarray:
+    def van_genuchten(s: np.ndarray, alfa, n, a: float, rho, g: float) -> np.ndarray:
         """
         Van Genuchten retention curve.
 
@@ -57,7 +57,7 @@ class RetentionCurves:
         value1 = -(1 / alfa) * ((0.5 ** (-1. / m) - 1) ** (1. / n))
         value2 = -(a / alfa) * ((0.5 ** (-1. / m) - 1) ** (1. / n))
 
-        pressure = -(a / alfa) * ((s ** (-1. / m) - 1) ^ (1. / n)) + (value1 - value2)
+        pressure = -(a / alfa) * ((s ** (-1. / m) - 1) ** (1. / n)) + (value1 - value2)
         pressure = pressure * (rho * g) / 100
 
         return pressure
