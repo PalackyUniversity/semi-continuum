@@ -1,5 +1,6 @@
 from retention_curves import RetentionCurves
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 import seaborn as sns
 import numpy as np
 import math
@@ -9,7 +10,7 @@ import cv2
 sns.set_theme()
 
 # Define constants
-REALTIME = 2  # simulation time [s]
+REALTIME = 10  # simulation time [s]
 dL = 0.25 * 0.01  # size of the block [m]
 dx_PAR = dL / 0.01  # discretization parameter [-]  ratio of dL and 0.01m
 S0 = 0.01  # initial saturation [-]
@@ -55,6 +56,9 @@ M_Q = 1 - 1 / N_W
 
 # Definition of the relative permeability
 LAMBDA = 0.8
+
+TIME_INTERVAL = 1.0  # define interval in [s]
+LIM_VALUE = 0.999  # instead of unity, the value very close to unity is used
 
 
 def relative_permeability(saturation):
@@ -242,7 +246,7 @@ match WHICH_BRANCH:
 time_start = time.time()
 
 # Main part - saturation, pressure and flux update
-for k in range(iteration):
+for k in tqdm(range(iteration)):
     # ---------------SATURATION UPDATE--------------------------------------
     Q[:N, :M] = Q1[:N, :M] - Q1[:N, 1:M + 1] + Q2[:N, :M] - Q2[1:N + 1, :M]
     Snew = S + SM * Q
@@ -255,19 +259,15 @@ for k in range(iteration):
     # However, for all the 2D simulations published or are in reviewing process,
     # saturation had never reached unity so this implementation was not used.
 
-    limValue = 0.999  # instead of unity, the value very close to unity is used
-    maximum = np.amax(np.abs(Snew))
-    while maximum > limValue:
+    while np.amax(np.abs(Snew)) > LIM_VALUE:
         S_over = np.zeros((N, M))
-        S_over[Snew > limValue] = Snew(Snew > limValue) - limValue
-        Snew[Snew > limValue] = limValue
+        S_over[Snew > LIM_VALUE] = Snew(Snew > LIM_VALUE) - LIM_VALUE
+        Snew[Snew > LIM_VALUE] = LIM_VALUE
 
         id1, id2 = np.nonzero(S_over[1:, :] > 0)
 
         for i in range(len(id1)):
             Snew[id1[i], id2[i]] = Snew[id1[i], id2[i]] + S_over[id1[i] + 1, id2[i]]
-
-        maximum = max(max(abs(Snew)))
 
     # bottom boundary condition residual saturation is used
     boundLim = np.minimum(Snew[N-1, :], np.ones((1, M)) * SATURATION_RESIDUAL)
@@ -317,8 +317,7 @@ for k in range(iteration):
     # ---------------SAVING DATA--------------------------------------------
 
     # saving data and check mass balance law
-    timeInterval = 1  # define interval [s] for which data are saved
-    if k % (RATIO * (1 / dtBase) * timeInterval) == 0:
+    if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
         t = round(k * dt)  # calculation a real simulation time
 
         Saturation[:, :, t] = S
@@ -336,17 +335,13 @@ for k in range(iteration):
             relchyba = chyba / (k * SM * Q0)  # relative error
 
             if abs(relchyba) > 1e-10:
-                print(f"Error in saturation: absolute and relative errors respectively {chyba}  {relchyba}")
+                print(f"Error in saturation: absolute and relative errors respectively {chyba} {relchyba}")
 
-    # Information of calculated simulation time printed on the terminal.
-    timeInterval = 1.0  # define interval in [s]
-    #if k % (RATIO * (1 / dtBase) * timeInterval) == 0:
-    if k % 1000 == 0:
-        t = k * dt  # calculation a real simulation time
+        # Information of calculated simulation time printed on the terminal.
         print(f"Simulation time and real time respectively: {t}, seconds {time.time() - time_start} seconds")
 
     # Only for a code testing purpose.
-    if np.abs(np.amax(S)) > limValue:
+    if np.abs(np.amax(S)) > LIM_VALUE:
         raise Exception("Saturation is over limValue defined in the code. Something is wrong.")
 
 print(f"The simulation lasted: {time.time() - time_start} seconds.")
@@ -375,7 +370,7 @@ if PLOT_TIME:
             text = f"Time = {time} [s]   {S0}"
             mat[:, :] = Saturation[:, :, time]
             # TODO hSurface=bar3(mat)
-            plt.title(text)
+            # plt.title(text)
             # TODO axis([0 mm 0 nn 0 1])
             # TODO view(-120, 40)
             # TODO pause(.001)
@@ -384,8 +379,8 @@ if PLOT_TIME:
         for time in np.arange(0, kk, step):
             xx = np.arange(dL, B, dL)
             yy = Saturation[:, 0, time]
-            plt.plot(xx, yy, color="k")
-            plt.title(f"Saturation in 1D: Time = {time} [s]   {S0}")
+            # plt.plot(xx, yy, color="k")
+            # plt.title(f"Saturation in 1D: Time = {time} [s]   {S0}")
             # TODO axis([0 b 0 1])
             # TODO pause(.001)
 
