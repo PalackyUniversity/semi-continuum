@@ -1,17 +1,15 @@
-import math
-
-from matplotlib import pyplot as plt
-
 from retention_curves import RetentionCurves
+from matplotlib import pyplot as plt
 import seaborn as sns
 import numpy as np
+import math
 import time
 import cv2
 
 sns.set_theme()
 
 # Define constants
-REALTIME = 180  # simulation time [s]
+REALTIME = 2  # simulation time [s]
 dL = 0.25 * 0.01  # size of the block [m]
 dx_PAR = dL / 0.01  # discretization parameter [-]  ratio of dL and 0.01m
 S0 = 0.01  # initial saturation [-]
@@ -29,27 +27,23 @@ RHO = 1000  # density of water
 
 Q0 = 8e-5  # flux at the top of boundary [m/s]
 FLUX_FULL = False  # set True for flux at whole top boundary, otherwise set false
-FLUX_MIDDLE = True  # set True for flux at middle of top boundary (at 1 cm), otherwise set false
+FLUX_MIDDLE = True  # set True for flux at middle of top boundary (at 1 cm), otherwise set False
 
-# The flux from the bottom boundary is set to zero if the saturation of the 
-# respective block does not exceed a residual saturation.
-# Otherwise, equation (7) is used from the paper: https://doi.org/10.1038/s41598-021-82317-x
-# Set residual saturation above 1.00 in the case of zero bottom boundary flux
+# The flux from the bottom boundary is set to zero if the saturation of the respective block does not exceed a residual
+# saturation. Otherwise, equation (7) is used from the paper: https://doi.org/10.1038/s41598-021-82317-x Set residual
+# saturation above 1.00 in the case of zero bottom boundary flux
 # SATURATION_RESIDUAL = 0.05  # residual saturation
 SATURATION_RESIDUAL = 1.05  # residual saturation
 
 # hysteresis: the gradient of transition between the main branches of the retention curve hysteresis
 Kps = 1e5
 
-# Set true if you want to use van Genuchten retention curve. 
-# Set false if you want to use logistic retention curve.
-# Van Genuchten retention curve is defined in m-file vanGenuchten.m 
-# TODO Logistic retention curve is defined in m-files CurveDrain.m and CurveWet.m
-# Logistic retention curve is used in: https://doi.org/10.1038/s41598-019-44831-x
-# Van Genuchten retention curve is recommended to use.
+# Set True if you want to use van Genuchten retention curve. = recommended
+# Set False if you want to use logistic retention curve. Used in: https://doi.org/10.1038/s41598-019-44831-x
+# Retention curves are defined in retention_curves.py
 GENUCHTEN = True
-# Definition of the initial pressure. You can either start on the main
-# wetting branch (set "wet") or main draining branch (set "drain").
+
+# Definition of the initial pressure. You can either start on the main wetting branch or main draining branch
 WHICH_BRANCH = "wet"
 
 # van Genuchten parameters for 20/30 sand
@@ -76,28 +70,18 @@ SM = dt / (THETA * dL)  # [s/m] parameter
 
 iteration = round(REALTIME / dt)  # number of iteratioN, t=dt*iter is REALTIME
 
-# Set True for time plot of porous media flow  # for 1D flow (i.e. m=1) plot function is used
-# for 2D flow (i.e. m>1) bar3 function is used
-plot_time = True
+PLOT_TIME = True  # Set True for time plot of porous media flow
+SAVE_DATA = True  # Set True if you want to save Saturation and Pressure data
 
-# set True if you want to save Saturation and Pressure data
-save_data = True
-
-# name of variable for data saving
-if save_data:
-    name_data = [f"res/dx_{dL}_initial_saturation_{S0}.mat"]
-
-# set true if you want to plot the basic retention curve and its linear
-# modification which corresponds to the size of the block used for
-# simulation
-plotRetentionCurve = True
+# Set true if you want to plot the basic retention curve and its linearmodification which corresponds to the size of
+# the block used for simulation
+PLOT_RETENTION_CURVE = True
 
 # DEFINITION OF THE REFERENCE BLOCK SIZE
-# The crucial idea of the semi-continuum model is the scaling of the retention
-# curve. For more details, see: https://doi.org/10.1038/s41598-022-11437-9
+# The crucial idea of the semi-continuum model is the scaling of the retention curve.
+# For more details, see: https://doi.org/10.1038/s41598-022-11437-9
 
-# Parameters A_WB, A_DB define the linear multiplication of the retention 
-# curve for the wetting and draining branches, respectively.
+# Parameters A_WB, A_DB define the linear multiplication of the retention curve for the wetting and draining branches.
 # Define the reference block size of the retention curve in centimeters
 if GENUCHTEN:
     basic_block_size = 10 / 12  # the reference size of the block for 20/30 sand
@@ -123,7 +107,6 @@ else:
     print("Logistic retention curve is used for the simulation.")
 
 # Memory allocation
-
 S = np.zeros((N, M))  # saturation matrix
 Snew = np.zeros((N, M))  # saturation matrix for next iteration
 S0_ini = np.ones((N, M))  # initial saturation matrix
@@ -144,7 +127,7 @@ drain = np.zeros((N, M))  # logical variable for draining mode
 
 perm = np.zeros((N, M))  # relative permeability
 
-Saturation = np.zeros((N, M, REALTIME))  # Saturation field for saving data 
+Saturation = np.zeros((N, M, REALTIME))  # Saturation field for saving data
 Pressure = np.zeros((N, M, REALTIME))  # Pressure field for saving data
 
 # Fluxes fields for data saving
@@ -154,31 +137,27 @@ QQ = np.zeros((N, M, REALTIME))  # fluxes for/in each block
 
 # Distribution of intrinsic permeability
 
-# set false if you don't want to have randomization of the intrinsic
-# permeability  otherwise set true
-randomizationIntrinsicPermeability = True
+# Set false if you don't want to have randomization of the intrinsic permeability
+RANDOMIZATION_INTRINSIC_PERMEABILITY = True
 
 # Two different methods of randomization of intrinsic permeability: filter and interpolation methods. 
 # Interpolation method is recommended. For more details, see:
 # Kmec, J.: Analysis of the mathematical models for unsaturated porous media flow, 
-# Ph.D. thesis, Palacký University in Olomouc, Czech Republic, 2021.
 METHOD_FILTER = False  # imfilter method  filter method
 METHOD_INTERPOLATION = True  # imresize method  interpolation method
+KERNEL_SIZE = 6
 
-# TODO set True if you already have distribution of intrinsic permeability defined in the file randomPerm.mat useRandomizeFile = true
-LOAD_FROM_FILE = False
+LOAD_FROM_FILE = False  # If you already have distribution of intrinsic permeability defined in the file
 
 if LOAD_FROM_FILE:
-    text = ['randomPerm.mat']
-    # TODO load(text)
+    random_perm = np.load("random_perm.npy")
 
-if not LOAD_FROM_FILE and randomizationIntrinsicPermeability:
-    print(S.shape)
+if not LOAD_FROM_FILE and RANDOMIZATION_INTRINSIC_PERMEABILITY:
     if METHOD_FILTER:
-        randomPerm = np.random.normal(0, 1, S.shape) * 0.8
-        KERNEL_SIZE = 6  # TODO const
-        randomPerm = cv2.filter2D(randomPerm, -1, np.ones((KERNEL_SIZE, KERNEL_SIZE), np.float32) / KERNEL_SIZE)
-        # TODO save('randomPerm_imfilter.mat', 'randomPerm')
+        random_perm = np.random.normal(0, 1, S.shape) * 0.8
+
+        random_perm = cv2.filter2D(random_perm, -1, np.ones((KERNEL_SIZE, KERNEL_SIZE), np.float64) / KERNEL_SIZE)
+        np.save("random_perm_filter.npy", random_perm)
 
     if METHOD_INTERPOLATION:
         # define intrinsic permeability for the blocks of the size 2.5cm
@@ -187,20 +166,20 @@ if not LOAD_FROM_FILE and randomizationIntrinsicPermeability:
         index2 = math.ceil(B / block_par)
 
         interpolationBlocks = block_par / dL
-        randomPerm = np.random.normal(0, 1, [index2, index1]) * 0.3
+        random_perm = np.random.normal(0, 1, [index2, index1]) * 0.3
 
         # TODO if debug, to stejné nahoře
         # cv2.imshow("randomPerm1", randomPerm)
-        randomPerm = cv2.resize(randomPerm, None, fx=interpolationBlocks, fy=interpolationBlocks,
-                                interpolation=cv2.INTER_LINEAR)
+        random_perm = cv2.resize(random_perm, None, fx=interpolationBlocks, fy=interpolationBlocks,
+                                 interpolation=cv2.INTER_LINEAR)
         # cv2.imshow("randomPerm2", randomPerm)
         # cv2.waitKey(0)
-        # TODO save('randomPerm_imresize.mat', 'randomPerm')
+        np.save("random_perm_resize.npy", random_perm)
 
-if randomizationIntrinsicPermeability:
-    nasob = np.zeros_like(randomPerm)
-    nasob[randomPerm > 0] = (1 + randomPerm[randomPerm > 0])
-    nasob[randomPerm < 0] = (1. / (1 - randomPerm[randomPerm < 0]))
+if RANDOMIZATION_INTRINSIC_PERMEABILITY:
+    nasob = np.zeros_like(random_perm)
+    nasob[random_perm > 0] = (1 + random_perm[random_perm > 0])
+    nasob[random_perm < 0] = (1. / (1 - random_perm[random_perm < 0]))
 else:
     nasob = np.ones_like(S)
 
@@ -208,9 +187,9 @@ k_rnd = KAPPA * nasob
 
 print('################# INTRINSIC PERMEABILITY #################')
 
-if randomizationIntrinsicPermeability:
+if RANDOMIZATION_INTRINSIC_PERMEABILITY:
     print(
-        f"The minimum and maximum of the field randomPerm respectively:  {np.amin(randomPerm)}, {np.amax(randomPerm)}")
+        f"The minimum and maximum of the field randomPerm respectively:  {np.amin(random_perm)}, {np.amax(random_perm)}")
     print(f"The minimum and maximum of the intrinsic permeablity:          {np.amin(k_rnd)}, {np.amax(k_rnd)}")
     print(f"The average and predefined intrinsic permeablity respectively: {np.mean(k_rnd)}, {KAPPA}")
 else:
@@ -233,7 +212,7 @@ elif not FLUX_FULL and FLUX_MIDDLE:  # Flux q0 at the middle at 1 cm.
     pom = round(middle / dL)
     vec = round(0.01 / dL)
 
-    Q2[0, pom: pom + vec - 1] = Q0
+    Q2[0, pom: pom + vec] = Q0
 
 else:  # Flux q0 only in the middle block.
     Q2[0, round(M / 2)] = Q0
@@ -283,8 +262,7 @@ for k in range(iteration):
         S_over[Snew > limValue] = Snew(Snew > limValue) - limValue
         Snew[Snew > limValue] = limValue
 
-        # TODO find - np.nonzero
-        [id1, id2] = find(S_over[1:, :] > 0)
+        id1, id2 = np.nonzero(S_over[1:, :] > 0)
 
         for i in range(len(id1)):
             Snew[id1[i], id2[i]] = Snew[id1[i], id2[i]] + S_over[id1[i] + 1, id2[i]]
@@ -362,7 +340,8 @@ for k in range(iteration):
 
     # Information of calculated simulation time printed on the terminal.
     timeInterval = 1.0  # define interval in [s]
-    if k % (RATIO * (1 / dtBase) * timeInterval) == 0:
+    #if k % (RATIO * (1 / dtBase) * timeInterval) == 0:
+    if k % 1000 == 0:
         t = k * dt  # calculation a real simulation time
         print(f"Simulation time and real time respectively: {t}, seconds {time.time() - time_start} seconds")
 
@@ -372,13 +351,17 @@ for k in range(iteration):
 
 print(f"The simulation lasted: {time.time() - time_start} seconds.")
 
-# TODO Data saving
-# TODO if save_data:
-#    save(nameData,'Saturation','Pressure','QQ1','QQ2','QQ')
+# Data saving
+if SAVE_DATA:
+    np.save(f"res/dx_{dL}_initial_saturation_{S0}_saturation.npy", Saturation)
+    np.save(f"res/dx_{dL}_initial_saturation_{S0}_pressure.npy", Pressure)
+    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq1.npy", QQ1)
+    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq2.npy", QQ2)
+    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq.npy", QQ)
 
 # Time plot in two/three dimensions
 
-if plot_time:
+if PLOT_TIME:
     step = 10  # time step plot figures
     nn, mm, kk = Saturation.shape
 
@@ -402,25 +385,24 @@ if plot_time:
             xx = np.arange(dL, B, dL)
             yy = Saturation[:, 0, time]
             plt.plot(xx, yy, color="k")
-            plt.title(f"Saturation in 1D: Time = {tt} [s]   {S0}")
+            plt.title(f"Saturation in 1D: Time = {time} [s]   {S0}")
             # TODO axis([0 b 0 1])
             # TODO pause(.001)
 
 # Plot retention curve
-
 # plot the basic retention curve and its linear modification defined by the
 # scaling of the retention curve
-if plotRetentionCurve:
+if PLOT_RETENTION_CURVE:
     SS = np.arange(0.001, 0.999, 0.001)
     Pwett = retention_curves.van_genuchten(SS, ALFA_W, N_W, 1, RHO, G)
     Pdrain = retention_curves.van_genuchten(SS, ALFA_D, N_D, 1, RHO, G)
-    plt.plot(SS, Pwett, color="r")
-    plt.plot(SS, Pdrain, color="k")
+    plt.plot(SS, Pwett, color="r", label="Basic WB")
+    plt.plot(SS, Pdrain, color="k", label="Basic DB")
 
     P1 = retention_curves.van_genuchten(SS, ALFA_W, N_W, A_WB, RHO, G)
     P2 = retention_curves.van_genuchten(SS, ALFA_D, N_D, A_DB, RHO, G)
-    plt.plot(SS, P1, color="r", style="dashed")
-    plt.plot(SS, P2, color="k", style="dashed")
+    plt.plot(SS, P1, color="r", linestyle="dashed", label="Updated WB: scaled retention curve")
+    plt.plot(SS, P2, color="k", linestyle="dashed", label="Updated DB: scaled retention curve")
 
-    # legend('Basic WB','Basic DB','Updated WB: scaled retention curve','Updated DB: scaled retention curve')
+    plt.legend()
     plt.show()
