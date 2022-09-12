@@ -227,21 +227,20 @@ else:  # Flux q0 only in the middle block.
 
 retention_curves = RetentionCurves()
 
-match WHICH_BRANCH:
-    case "wet":
-        if GENUCHTEN:
-            P = retention_curves.van_genuchten(S, ALFA_W, N_W, A_WB, RHO, G)
-        else:
-            P = retention_curves.wet(S, A_WB)
+if WHICH_BRANCH == "wet":
+    if GENUCHTEN:
+        P = retention_curves.van_genuchten(S, ALFA_W, N_W, A_WB, RHO, G)
+    else:
+        P = retention_curves.wet(S, A_WB)
 
-    case "drain":
-        if GENUCHTEN:
-            P = retention_curves.van_genuchten(S, ALFA_D, N_D, A_DB, RHO, G)
-        else:
-            P = retention_curves.drain(S, A_DB)
+elif WHICH_BRANCH == "drain":
+    if GENUCHTEN:
+        P = retention_curves.van_genuchten(S, ALFA_D, N_D, A_DB, RHO, G)
+    else:
+        P = retention_curves.drain(S, A_DB)
 
-    case _:
-        raise Exception("The parameter WHICH_BRANCH is not set correctly.")
+else:
+    raise Exception("The parameter WHICH_BRANCH is not set correctly.")
 
 time_start = time.time()
 
