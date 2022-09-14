@@ -340,7 +340,7 @@ for k in tqdm(range(1, iteration+1)):
             print(f"Error in saturation: absolute and relative errors respectively {chyba} {relchyba}")
 
         # Information of calculated simulation time printed on the terminal.
-        print(f"Simulation time and real time respectively: {t}, seconds {time.time() - time_start} seconds")
+        print(f"Simulation time and real time respectively: {t+1}, seconds {time.time() - time_start} seconds")
 
     # Only for a code testing purpose.
     if np.abs(np.amax(S)) > LIM_VALUE:
