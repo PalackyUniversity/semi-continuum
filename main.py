@@ -5,6 +5,7 @@ import seaborn as sns
 import numpy as np
 import math
 import time
+import copy
 import cv2
 
 sns.set_theme()
@@ -110,34 +111,37 @@ if GENUCHTEN:
 else:
     print("Logistic retention curve is used for the simulation.")
 
+# DTYPE = np.longdouble  # = "float128"
+DTYPE = np.double  # = "float64"
+
 # Memory allocation
-S = np.zeros((N, M))  # saturation matrix
-Snew = np.zeros((N, M))  # saturation matrix for next iteration
-S0_ini = np.ones((N, M))  # initial saturation matrix
+S = np.zeros((N, M), dtype=DTYPE)  # saturation matrix
+Snew = np.zeros((N, M), dtype=DTYPE)  # saturation matrix for next iteration
+S0_ini = np.ones((N, M), dtype=DTYPE)  # initial saturation matrix
 
 # allocation memory for bottom boundary condition defined by residual saturation S_rs
-boundFlux = np.zeros((1, M))
-boundLim = np.zeros((1, M))
+boundFlux = np.zeros((1, M), dtype=DTYPE)
+boundLim = np.zeros((1, M), dtype=DTYPE)
 
-Q1 = np.zeros((N, M + 1))  # flux matrix for side fluxes
-Q2 = np.zeros((N + 1, M))  # flux matrix for downward fluxes
-Q = np.zeros((N, M))  # flux matrix for/in "each block"
+Q1 = np.zeros((N, M + 1), dtype=DTYPE)  # flux matrix for side fluxes
+Q2 = np.zeros((N + 1, M), dtype=DTYPE)  # flux matrix for downward fluxes
+Q = np.zeros((N, M), dtype=DTYPE)  # flux matrix for/in "each block"
 
-P = np.zeros((N, M))  # pressure matrix
-Pwett = np.zeros((N, M))  # pressure for wetting curve
-Pdrain = np.zeros((N, M))  # pressure for draining curve
-wett = np.zeros((N, M))  # logical variable for wetting mode
-drain = np.zeros((N, M))  # logical variable for draining mode
+P = np.zeros((N, M), dtype=DTYPE)  # pressure matrix
+Pwett = np.zeros((N, M), dtype=DTYPE)  # pressure for wetting curve
+Pdrain = np.zeros((N, M), dtype=DTYPE)  # pressure for draining curve
+wett = np.zeros((N, M), dtype=DTYPE)  # logical variable for wetting mode
+drain = np.zeros((N, M), dtype=DTYPE)  # logical variable for draining mode
 
-perm = np.zeros((N, M))  # relative permeability
+perm = np.zeros((N, M), dtype=DTYPE)  # relative permeability
 
-Saturation = np.zeros((N, M, REALTIME))  # Saturation field for saving data
-Pressure = np.zeros((N, M, REALTIME))  # Pressure field for saving data
+Saturation = np.zeros((N, M, REALTIME), dtype=DTYPE)  # Saturation field for saving data
+Pressure = np.zeros((N, M, REALTIME), dtype=DTYPE)  # Pressure field for saving data
 
 # Fluxes fields for data saving
-QQ1 = np.zeros((N, M + 1, REALTIME))  # side fluxes
-QQ2 = np.zeros((N + 1, M, REALTIME))  # downward fluxes
-QQ = np.zeros((N, M, REALTIME))  # fluxes for/in each block
+QQ1 = np.zeros((N, M + 1, REALTIME), dtype=DTYPE)  # side fluxes
+QQ2 = np.zeros((N + 1, M, REALTIME), dtype=DTYPE)  # downward fluxes
+QQ = np.zeros((N, M, REALTIME), dtype=DTYPE)  # fluxes for/in each block
 
 # Distribution of intrinsic permeability
 
@@ -245,7 +249,7 @@ else:
 time_start = time.time()
 
 # Main part - saturation, pressure and flux update
-for k in tqdm(range(iteration)):
+for k in tqdm(range(1, iteration+1)):
     # ---------------SATURATION UPDATE--------------------------------------
     Q[:N, :M] = Q1[:N, :M] - Q1[:N, 1:M + 1] + Q2[:N, :M] - Q2[1:N + 1, :M]
     Snew = S + SM * Q
@@ -308,17 +312,16 @@ for k in tqdm(range(iteration)):
         np.sqrt(perm[:N - 1, :M]) * \
         np.sqrt(perm[1:N, :M]) * \
         (RHO * G - ((P[1:N, :M] - P[:N - 1, :M]) / dL))
-    S = Snew
+
+    S = copy.deepcopy(Snew)
 
     # Calculation of flux at bottom boundary.
     boundFlux[0, :] = (1 / MU) * k_rnd[N-1, :M] * perm[N-1, :M] * (RHO * G - ((0 - P[N-1, :M]) / dL))
 
     # ---------------SAVING DATA--------------------------------------------
-
     # saving data and check mass balance law
     if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
-        t = round(k * dt)  # calculation a real simulation time
-
+        t = round(k * dt) - 1  # calculation a real simulation time
         Saturation[:, :, t] = S
         Pressure[:, :, t] = P
 
@@ -333,8 +336,8 @@ for k in tqdm(range(iteration)):
             chyba = (np.sum(S) - np.sum(S0_ini)) - k * SM * Q0 * (1 / dx_PAR)  # absolute error
             relchyba = chyba / (k * SM * Q0)  # relative error
 
-            if abs(relchyba) > 1e-10:
-                print(f"Error in saturation: absolute and relative errors respectively {chyba} {relchyba}")
+            # if abs(relchyba) > 1e-10:
+            print(f"Error in saturation: absolute and relative errors respectively {chyba} {relchyba}")
 
         # Information of calculated simulation time printed on the terminal.
         print(f"Simulation time and real time respectively: {t}, seconds {time.time() - time_start} seconds")
