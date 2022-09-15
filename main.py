@@ -1,17 +1,16 @@
-from retention_curves import RetentionCurves
+from retention_curves import *
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 import seaborn as sns
 import numpy as np
 import math
 import time
-import copy
 import cv2
 
 sns.set_theme()
 
 # Define constants
-REALTIME = 10  # simulation time [s]
+REALTIME = 1  # simulation time [s]
 dL = 0.25 * 0.01  # size of the block [m]
 dx_PAR = dL / 0.01  # discretization parameter [-]  ratio of dL and 0.01m
 S0 = 0.01  # initial saturation [-]
@@ -26,6 +25,10 @@ THETA = 0.35  # porosity
 KAPPA = 2.293577981651376e-10  # intrinsic permeability
 MU = 9e-4  # dynamic viscosity
 RHO = 1000  # density of water
+
+MU_INVERSE = 1 / MU
+
+RHO_G = RHO * G  # density of water times acceleration due to gravity
 
 Q0 = 8e-5  # flux at the top of boundary [m/s]
 FLUX_FULL = False  # set True for flux at whole top boundary, otherwise set false
@@ -49,11 +52,8 @@ GENUCHTEN = True
 WHICH_BRANCH = "wet"
 
 # van Genuchten parameters for 20/30 sand
-ALFA_W = 0.177
-N_W = 6.23
-ALFA_D = 0.0744
-N_D = 8.47
-M_Q = 1 - 1 / N_W
+
+M_Q = 1 - 1 / VanGenuchtenWet.N
 
 # Definition of the relative permeability
 LAMBDA = 0.8
@@ -61,11 +61,7 @@ LAMBDA = 0.8
 TIME_INTERVAL = 1.0  # define interval in [s]
 LIM_VALUE = 0.999  # instead of unity, the value very close to unity is used
 
-
-def relative_permeability(saturation):
-    # return saturation ** 3.5
-    return saturation ** LAMBDA * (1 - (1 - saturation ** (1 / M_Q)) ** M_Q) ** 2
-
+M_Q_inverse = 1 / M_Q
 
 # Definition of the time step
 dtBase = 1e-3 * 0.25  # time step [s] for dL=0.01[m]
@@ -89,12 +85,11 @@ PLOT_RETENTION_CURVE = True
 # Parameters A_WB, A_DB define the linear multiplication of the retention curve for the wetting and draining branches.
 # Define the reference block size of the retention curve in centimeters
 if GENUCHTEN:
-    basic_block_size = 10 / 12  # the reference size of the block for 20/30 sand
+    basic_block_size = 10.0 / 12.0  # the reference size of the block for 20/30 sand
 else:
     basic_block_size = 1.0  # the reference size of the block for the logistic retention curve
 
-A_WB = (1 / basic_block_size) * dx_PAR
-A_DB = (1 / basic_block_size) * dx_PAR
+A_RC = (1 / basic_block_size) * dx_PAR
 
 # Output for the terminal.
 print("Followed parameters are used for the simulation.")
@@ -229,22 +224,12 @@ else:  # Flux q0 only in the middle block.
 #   - 'wet' we start on the main wetting branch
 #   - 'drain' we start on the main draining branch.
 
-retention_curves = RetentionCurves()
+retention_curve_wet = (VanGenuchtenWet(A_RC, RHO_G) if GENUCHTEN else RetentionCurveWet(A_RC)).calculate
+retention_curve_drain = (VanGenuchtenDrain(A_RC, RHO_G) if GENUCHTEN else RetentionCurveDrain(A_RC)).calculate
 
-if WHICH_BRANCH == "wet":
-    if GENUCHTEN:
-        P = retention_curves.van_genuchten(S, ALFA_W, N_W, A_WB, RHO, G)
-    else:
-        P = retention_curves.wet(S, A_WB)
+P = retention_curve_wet(S) if WHICH_BRANCH == "wet" else retention_curve_drain(S)
 
-elif WHICH_BRANCH == "drain":
-    if GENUCHTEN:
-        P = retention_curves.van_genuchten(S, ALFA_D, N_D, A_DB, RHO, G)
-    else:
-        P = retention_curves.drain(S, A_DB)
-
-else:
-    raise Exception("The parameter WHICH_BRANCH is not set correctly.")
+bound_residual = np.ones((1, M)) * SATURATION_RESIDUAL
 
 time_start = time.time()
 
@@ -273,7 +258,7 @@ for k in tqdm(range(1, iteration+1)):
             Snew[id1[i], id2[i]] = Snew[id1[i], id2[i]] + S_over[id1[i] + 1, id2[i]]
 
     # bottom boundary condition residual saturation is used
-    boundLim = np.minimum(Snew[N-1, :], np.ones((1, M)) * SATURATION_RESIDUAL)
+    boundLim = np.minimum(Snew[N-1, :], bound_residual)
     Snew[N-1, :] = np.maximum(Snew[N-1, :] + SM * boundFlux, boundLim)
 
     # ---------------PRESSURE UPDATE----------------------------------------
@@ -281,12 +266,8 @@ for k in tqdm(range(1, iteration+1)):
     # hysteresis
     P = P + Kps * (Snew - S)
 
-    if GENUCHTEN:
-        Pwett = retention_curves.van_genuchten(S, ALFA_W, N_W, A_WB, RHO, G)
-        Pdrain = retention_curves.van_genuchten(S, ALFA_D, N_D, A_DB, RHO, G)
-    else:
-        Pwett = retention_curves.wet(S, A_WB)
-        Pdrain = retention_curves.drain(S, A_DB)
+    Pwett = retention_curve_wet(S)
+    Pdrain = retention_curve_drain(S)
 
     wett = (Snew - S) > 0  # logical matrix for wetting branch
     drain = (S - Snew) > 0  # logical matrix for draining branch
@@ -296,27 +277,27 @@ for k in tqdm(range(1, iteration+1)):
 
     # ---------------FLUX UPDATE--------------------------------------------
 
-    # Side fluxes at boundary are set to zero.
-    perm = relative_permeability(Snew)
+    # Calculate relative permeability Side fluxes at boundary are set to zero.
+    perm = Snew ** LAMBDA * (1 - (1 - Snew ** M_Q_inverse) ** M_Q) ** 2
 
-    Q1[:, 1:M] = (1 / MU) * \
+    Q1[:, 1:M] = MU_INVERSE * \
         np.sqrt(k_rnd[:N, :M - 1]) * \
         np.sqrt(k_rnd[:N, 1:M]) * \
         np.sqrt(perm[:N, :M - 1]) * \
         np.sqrt(perm[:N, 1:M]) * \
-        (0 * RHO * G - ((P[:N, 1:M] - P[:N, :M - 1]) / dL))
+        (- ((P[:N, 1:M] - P[:N, :M - 1]) / dL))
 
-    Q2[1:N, :] = (1 / MU) * \
+    Q2[1:N, :] = MU_INVERSE * \
         np.sqrt(k_rnd[:N - 1, :M]) * \
         np.sqrt(k_rnd[1:N, :M]) * \
         np.sqrt(perm[:N - 1, :M]) * \
         np.sqrt(perm[1:N, :M]) * \
-        (RHO * G - ((P[1:N, :M] - P[:N - 1, :M]) / dL))
+        (RHO_G - ((P[1:N, :M] - P[:N - 1, :M]) / dL))
 
-    S = copy.deepcopy(Snew)
+    S = Snew
 
     # Calculation of flux at bottom boundary.
-    boundFlux[0, :] = (1 / MU) * k_rnd[N-1, :M] * perm[N-1, :M] * (RHO * G - ((0 - P[N-1, :M]) / dL))
+    boundFlux[0, :] = MU_INVERSE * k_rnd[N-1, :M] * perm[N-1, :M] * (RHO_G - ((0 - P[N-1, :M]) / dL))
 
     # ---------------SAVING DATA--------------------------------------------
     # saving data and check mass balance law
@@ -391,13 +372,13 @@ if PLOT_TIME:
 # scaling of the retention curve
 if PLOT_RETENTION_CURVE:
     SS = np.arange(0.001, 0.999, 0.001)
-    Pwett = retention_curves.van_genuchten(SS, ALFA_W, N_W, 1, RHO, G)
-    Pdrain = retention_curves.van_genuchten(SS, ALFA_D, N_D, 1, RHO, G)
+    Pwett = VanGenuchtenWet(1, RHO_G).calculate(SS)
+    Pdrain = VanGenuchtenDrain(1, RHO_G).calculate(SS)
     plt.plot(SS, Pwett, color="r", label="Basic WB")
     plt.plot(SS, Pdrain, color="k", label="Basic DB")
 
-    P1 = retention_curves.van_genuchten(SS, ALFA_W, N_W, A_WB, RHO, G)
-    P2 = retention_curves.van_genuchten(SS, ALFA_D, N_D, A_DB, RHO, G)
+    P1 = VanGenuchtenWet(A_RC, RHO_G).calculate(SS)
+    P2 = VanGenuchtenDrain(A_RC, RHO_G).calculate(SS)
     plt.plot(SS, P1, color="r", linestyle="dashed", label="Updated WB: scaled retention curve")
     plt.plot(SS, P2, color="k", linestyle="dashed", label="Updated DB: scaled retention curve")
 
