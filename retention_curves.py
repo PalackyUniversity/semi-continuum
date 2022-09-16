@@ -75,12 +75,13 @@ class VanGenuchten(Curve):
         self.T = ((0.5 ** self.M - 1) ** self.N_INVERSE)
 
         # The scaling of the retention curve around the point S = 0.5.
-        self.A_ALFA = -(self.A / self.ALFA) * self.RHO_G
+        self.A_ALFA = -(self.A / self.ALFA)
 
         value1 = -(1 / self.ALFA) * self.T
-        value2 = self.A * self.T
+        value2 = self.A_ALFA * self.T
 
         self.VALUE_DIFF = (value1 - value2) * self.RHO_G
+        self.A_ALFA_RHO_G = self.A_ALFA * self.RHO_G
 
     def calculate(self, s: np.ndarray) -> np.ndarray:
         """
@@ -88,9 +89,7 @@ class VanGenuchten(Curve):
         :param s: saturation
         :return: pressure [Pa]
         """
-
-        # The scaling of the retention curve around the point S = 0.5.
-        return self.A_ALFA * ((s ** self.M - 1) ** self.N_INVERSE) + self.VALUE_DIFF
+        return self.A_ALFA_RHO_G * ((s ** self.M - 1) ** self.N_INVERSE) + self.VALUE_DIFF
 
 
 class VanGenuchtenDrain(VanGenuchten):
