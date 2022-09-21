@@ -62,6 +62,8 @@ LIM_VALUE = 0.999  # instead of unity, the value very close to unity is used
 
 M_Q_inverse = 1 / M_Q
 
+OUTPUT_DIR = "res"
+
 # Definition of the time step
 dtBase = 1e-3 * 0.25  # time step [s] for dL=0.01[m]
 dt = (dx_PAR ** 2) * dtBase  # time step [s], typical choice of time step parameter for parabolic equation
@@ -73,7 +75,7 @@ iteration = round(REALTIME / dt)  # number of iteratioN, t=dt*iter is REALTIME
 PLOT_TIME = True  # Set True for time plot of porous media flow
 SAVE_DATA = True  # Set True if you want to save Saturation and Pressure data
 
-# Set true if you want to plot the basic retention curve and its linearmodification which corresponds to the size of
+# Set true if you want to plot the basic retention curve and its linear modification which corresponds to the size of
 # the block used for simulation
 PLOT_RETENTION_CURVE = True
 
@@ -158,7 +160,7 @@ elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
 
         sns.heatmap(random_perm)
         plt.title("Randomized intrinsic permeability")
-        plt.savefig("res/random_perm_filter.png")
+        plt.savefig(f"{OUTPUT_DIR}/random_perm_filter.png")
         plt.clf()
 
         np.save("random_perm_filter.npy", random_perm)
@@ -174,17 +176,17 @@ elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
 
         sns.heatmap(random_perm)
         plt.title("Randomized intrinsic permeability - before")
-        plt.savefig("res/random_perm_interpolation_before.png")
+        plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_before.png")
         plt.clf()
 
         random_perm = cv2.resize(random_perm, None, fx=interpolation_blocks, fy=interpolation_blocks, interpolation=cv2.INTER_LINEAR)
 
         sns.heatmap(random_perm)
         plt.title("Randomized intrinsic permeability - after")
-        plt.savefig("res/random_perm_interpolation_after.png")
+        plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_after.png")
         plt.clf()
 
-        np.save("res/random_perm_interpolation.npy", random_perm)
+        np.save(f"{OUTPUT_DIR}/random_perm_interpolation.npy", random_perm)
 
 if RANDOMIZATION_INTRINSIC_PERMEABILITY:
     nasob = np.zeros_like(random_perm)
@@ -327,11 +329,11 @@ print(f"The simulation lasted: {time.time() - time_start} s")
 
 # Data saving
 if SAVE_DATA:
-    np.save(f"res/dx_{dL}_initial_saturation_{S0}_saturation.npy", saturation)
-    np.save(f"res/dx_{dL}_initial_saturation_{S0}_pressure.npy", pressure)
-    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq1.npy", QQ1)
-    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq2.npy", QQ2)
-    np.save(f"res/dx_{dL}_initial_saturation_{S0}_qq.npy", QQ)
+    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.npy", saturation)
+    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.npy", pressure)
+    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq1.npy", QQ1)
+    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq2.npy", QQ2)
+    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq.npy", QQ)
 
 # Time plot in two/three dimensions
 if PLOT_TIME:
