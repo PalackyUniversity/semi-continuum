@@ -17,8 +17,11 @@ S0 = 0.01  # initial saturation [-]
 
 A = 0.31  # width of the medium [m]  for a=dL 1D semi-continuum model is used
 B = 0.50  # depth of the medium [m]
-M = math.floor(A / dL)  # number of blocks in a row
-N = math.floor(B / dL)  # number of blocks in a column
+C = A
+
+X = math.floor(A / dL)  # number of blocks in a row
+Y = math.floor(B / dL)  # number of blocks in a column
+Z = math.floor(C / dL)  # number of blocks in 3D
 
 G = 9.81  # acceleration due to gravity
 THETA = 0.35  # porosity
@@ -111,33 +114,33 @@ else:
 DTYPE = np.double  # = "float64"
 
 # Memory allocation
-S = np.zeros((N, M), dtype=DTYPE)  # Saturation matrix
-S_new = np.zeros((N, M), dtype=DTYPE)  # Saturation matrix for next iteration
-S0_ini = np.ones((N, M), dtype=DTYPE)  # Initial saturation matrix
+S = np.zeros((Y, X), dtype=DTYPE)  # Saturation matrix
+S_new = np.zeros((Y, X), dtype=DTYPE)  # Saturation matrix for next iteration
+S0_ini = np.ones((Y, X), dtype=DTYPE)  # Initial saturation matrix
 
 # Bottom boundary condition defined by residual saturation S_rs
-bound_flux = np.zeros((1, M), dtype=DTYPE)
-bound_lim = np.zeros((1, M), dtype=DTYPE)
+bound_flux = np.zeros((1, X), dtype=DTYPE)
+bound_lim = np.zeros((1, X), dtype=DTYPE)
 
-Q1 = np.zeros((N, M + 1), dtype=DTYPE)  # Flux matrix for side fluxes
-Q2 = np.zeros((N + 1, M), dtype=DTYPE)  # Flux matrix for downward fluxes
-Q = np.zeros((N, M), dtype=DTYPE)  # Flux matrix for/in "each block"
+Q1 = np.zeros((Y, X + 1), dtype=DTYPE)  # Flux matrix for side fluxes
+Q2 = np.zeros((Y + 1, X), dtype=DTYPE)  # Flux matrix for downward fluxes
+Q = np.zeros((Y, X), dtype=DTYPE)  # Flux matrix for/in "each block"
 
-P = np.zeros((N, M), dtype=DTYPE)  # Pressure matrix
-P_wet = np.zeros((N, M), dtype=DTYPE)  # Pressure for wetting curve
-P_drain = np.zeros((N, M), dtype=DTYPE)  # Pressure for draining curve
-wet = np.zeros((N, M), dtype=DTYPE)  # Logical variable for wetting mode
-drain = np.zeros((N, M), dtype=DTYPE)  # Logical variable for draining mode
+P = np.zeros((Y, X), dtype=DTYPE)  # Pressure matrix
+P_wet = np.zeros((Y, X), dtype=DTYPE)  # Pressure for wetting curve
+P_drain = np.zeros((Y, X), dtype=DTYPE)  # Pressure for draining curve
+wet = np.zeros((Y, X), dtype=DTYPE)  # Logical variable for wetting mode
+drain = np.zeros((Y, X), dtype=DTYPE)  # Logical variable for draining mode
 
-perm = np.zeros((N, M), dtype=DTYPE)  # relative permeability
+perm = np.zeros((Y, X), dtype=DTYPE)  # relative permeability
 
-saturation = np.zeros((N, M, REALTIME), dtype=DTYPE)  # Saturation field for saving data
-pressure = np.zeros((N, M, REALTIME), dtype=DTYPE)  # Pressure field for saving data
+saturation = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Saturation field for saving data
+pressure = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Pressure field for saving data
 
 # Fluxes fields for data saving
-QQ1 = np.zeros((N, M + 1, REALTIME), dtype=DTYPE)  # Side fluxes
-QQ2 = np.zeros((N + 1, M, REALTIME), dtype=DTYPE)  # Downward fluxes
-QQ = np.zeros((N, M, REALTIME), dtype=DTYPE)  # Fluxes for/in each block
+QQ1 = np.zeros((Y, X + 1, REALTIME), dtype=DTYPE)  # Side fluxes
+QQ2 = np.zeros((Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
+QQ = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Fluxes for/in each block
 
 # Distribution of intrinsic permeability - False if you don't want to have randomization of the intrinsic permeability
 RANDOMIZATION_INTRINSIC_PERMEABILITY = True
@@ -196,6 +199,9 @@ else:
     nasob = np.ones_like(S)
 
 k_rnd = KAPPA * nasob
+k_rnd_sqrt = np.sqrt(k_rnd)
+k_rnd_q1 = MU_INVERSE * k_rnd_sqrt[:Y, :X - 1] * k_rnd_sqrt[:Y, 1:X]
+k_rnd_q2 = MU_INVERSE * k_rnd_sqrt[:Y - 1, :X] * k_rnd_sqrt[1:Y, :X]
 
 print("################# INTRINSIC PERMEABILITY #################")
 if RANDOMIZATION_INTRINSIC_PERMEABILITY:
@@ -224,7 +230,7 @@ elif not FLUX_FULL and FLUX_MIDDLE:  # Flux q0 at the middle at 1 cm.
     Q2[0, pom: pom + vec] = Q0
 
 else:  # Flux q0 only in the middle block.
-    Q2[0, round(M / 2)] = Q0
+    Q2[0, round(X / 2)] = Q0
 
 retention_curve_wet = (VanGenuchtenWet(A_RC, RHO_G) if GENUCHTEN else RetentionCurveWet(A_RC)).calculate
 retention_curve_drain = (VanGenuchtenDrain(A_RC, RHO_G) if GENUCHTEN else RetentionCurveDrain(A_RC)).calculate
@@ -234,14 +240,14 @@ retention_curve_drain = (VanGenuchtenDrain(A_RC, RHO_G) if GENUCHTEN else Retent
 #   - 'drain' we start on the main draining branch.
 P = retention_curve_wet(S) if WHICH_BRANCH == "wet" else retention_curve_drain(S)
 
-bound_residual = np.ones((1, M)) * SATURATION_RESIDUAL
+bound_residual = np.ones((1, X)) * SATURATION_RESIDUAL
 
 time_start = time.time()
 
 # Main part - saturation, pressure and flux update
 for k in tqdm(range(1, iteration+1)):
     # --------------- SATURATION UPDATE ---------------
-    Q[:N, :M] = Q1[:N, :M] - Q1[:N, 1:M + 1] + Q2[:N, :M] - Q2[1:N + 1, :M]
+    Q[:Y, :X] = Q1[:Y, :X] - Q1[:Y, 1:X + 1] + Q2[:Y, :X] - Q2[1:Y + 1, :X]
     S_new = S + SM * Q
 
     # If the flux is too large, then the saturation would increase over unity.
@@ -250,7 +256,7 @@ for k in tqdm(range(1, iteration+1)):
     # implementation provided for the 1D case. Thus water is returned only above. However, for all the 2D simulations
     # published or are in reviewing process, saturation had never reached unity so this implementation was not used.
     while np.amax(np.abs(S_new)) > LIM_VALUE:
-        S_over = np.zeros((N, M))
+        S_over = np.zeros((Y, X))
         S_over[S_new > LIM_VALUE] = S_new(S_new > LIM_VALUE) - LIM_VALUE
         S_new[S_new > LIM_VALUE] = LIM_VALUE
 
@@ -260,8 +266,8 @@ for k in tqdm(range(1, iteration+1)):
             S_new[id1[i], id2[i]] = S_new[id1[i], id2[i]] + S_over[id1[i] + 1, id2[i]]
 
     # Bottom boundary condition residual saturation is used
-    bound_lim = np.minimum(S_new[N - 1, :], bound_residual)
-    S_new[N - 1, :] = np.maximum(S_new[N - 1, :] + SM * bound_flux, bound_lim)
+    bound_lim = np.minimum(S_new[Y - 1, :], bound_residual)
+    S_new[Y - 1, :] = np.maximum(S_new[Y - 1, :] + SM * bound_flux, bound_lim)
 
     # --------------- PRESSURE UPDATE ---------------
     # Hysteresis
@@ -279,25 +285,22 @@ for k in tqdm(range(1, iteration+1)):
     # --------------- FLUX UPDATE ---------------
     # Calculate relative permeability Side fluxes at boundary are set to zero.
     perm = S_new ** LAMBDA * (1 - (1 - S_new ** M_Q_inverse) ** M_Q) ** 2
+    perm_sqrt = np.sqrt(perm)
 
-    Q1[:, 1:M] = MU_INVERSE * \
-        np.sqrt(k_rnd[:N, :M - 1]) * \
-        np.sqrt(k_rnd[:N, 1:M]) * \
-        np.sqrt(perm[:N, :M - 1]) * \
-        np.sqrt(perm[:N, 1:M]) * \
-        (- ((P[:N, 1:M] - P[:N, :M - 1]) / dL))
+    Q1[:, 1:X] = k_rnd_q1 * \
+                 perm_sqrt[:Y, :X - 1] * \
+                 perm_sqrt[:Y, 1:X] * \
+                 (- ((P[:Y, 1:X] - P[:Y, :X - 1]) / dL))
 
-    Q2[1:N, :] = MU_INVERSE * \
-        np.sqrt(k_rnd[:N - 1, :M]) * \
-        np.sqrt(k_rnd[1:N, :M]) * \
-        np.sqrt(perm[:N - 1, :M]) * \
-        np.sqrt(perm[1:N, :M]) * \
-        (RHO_G - ((P[1:N, :M] - P[:N - 1, :M]) / dL))
+    Q2[1:Y, :] = k_rnd_q2 * \
+                 perm_sqrt[:Y - 1, :X] * \
+                 perm_sqrt[1:Y, :X] * \
+                 (RHO_G - ((P[1:Y, :X] - P[:Y - 1, :X]) / dL))
 
     S = S_new
 
     # Calculation of flux at bottom boundary.
-    bound_flux[0, :] = MU_INVERSE * k_rnd[N - 1, :M] * perm[N - 1, :M] * (RHO_G - ((0 - P[N - 1, :M]) / dL))
+    bound_flux[0, :] = MU_INVERSE * k_rnd[Y - 1, :X] * perm[Y - 1, :X] * (RHO_G - ((0 - P[Y - 1, :X]) / dL))
 
     # --------------- Saving data and check mass balance law ---------------
     if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
