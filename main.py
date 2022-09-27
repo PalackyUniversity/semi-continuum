@@ -191,7 +191,6 @@ elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
         # plt.title("Randomized intrinsic permeability - before")
         # plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_before.png")
         # plt.clf()
-        print(random_perm.shape)
 
         random_perm = zoom(random_perm, (interpolation_blocks, interpolation_blocks, interpolation_blocks))
 
@@ -210,7 +209,6 @@ if RANDOMIZATION_INTRINSIC_PERMEABILITY:
 else:
     nasob = np.ones_like(S)
 
-print(random_perm.shape)
 k_rnd = KAPPA * nasob
 k_rnd_sqrt = np.sqrt(k_rnd)
 k_rnd_q1 = MU_INVERSE * k_rnd_sqrt[:Z, :Y, :X - 1] * k_rnd_sqrt[:Z, :Y, 1:X]
