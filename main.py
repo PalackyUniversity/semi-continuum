@@ -318,7 +318,7 @@ for k in tqdm(range(1, iteration+1)):
     Q3[1:Z, :, :] = k_rnd_q3 * \
         perm_sqrt[:Z - 1, :Y, :X] * \
         perm_sqrt[1:Z, :Y, :X] * \
-        (RHO_G - ((P[1:Z, :Y, :X] - P[:Z - 1, :Y, :X]) / dL))
+        (- ((P[1:Z, :Y, :X] - P[:Z - 1, :Y, :X]) / dL))
 
     S = S_new
 
