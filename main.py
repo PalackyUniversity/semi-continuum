@@ -1,5 +1,10 @@
+# TODO Q3
+# TODO 3D graf
+# TODO předpočítat retenční křivky
+
 from retention_curves import *
 from matplotlib import pyplot as plt
+from scipy.ndimage import zoom
 from tqdm import tqdm
 import seaborn as sns
 import numpy as np
@@ -114,33 +119,35 @@ else:
 DTYPE = np.double  # = "float64"
 
 # Memory allocation
-S = np.zeros((Y, X), dtype=DTYPE)  # Saturation matrix
-S_new = np.zeros((Y, X), dtype=DTYPE)  # Saturation matrix for next iteration
-S0_ini = np.ones((Y, X), dtype=DTYPE)  # Initial saturation matrix
+S = np.zeros((Z, Y, X), dtype=DTYPE)  # Saturation matrix
+S_new = np.zeros((Z, Y, X), dtype=DTYPE)  # Saturation matrix for next iteration
+S0_ini = np.ones((Z, Y, X), dtype=DTYPE)  # Initial saturation matrix
 
 # Bottom boundary condition defined by residual saturation S_rs
-bound_flux = np.zeros((1, X), dtype=DTYPE)
-bound_lim = np.zeros((1, X), dtype=DTYPE)
+bound_flux = np.zeros((Z, 1, X), dtype=DTYPE)
+bound_lim = np.zeros((Z, 1, X), dtype=DTYPE)
 
-Q1 = np.zeros((Y, X + 1), dtype=DTYPE)  # Flux matrix for side fluxes
-Q2 = np.zeros((Y + 1, X), dtype=DTYPE)  # Flux matrix for downward fluxes
-Q = np.zeros((Y, X), dtype=DTYPE)  # Flux matrix for/in "each block"
+Q1 = np.zeros((Z, Y, X + 1), dtype=DTYPE)  # Flux matrix for side fluxes
+Q2 = np.zeros((Z, Y + 1, X), dtype=DTYPE)  # Flux matrix for downward fluxes
+Q3 = np.zeros((Z + 1, Y, X), dtype=DTYPE)  # Flux matrix for 3D Z fluxes
+Q = np.zeros((Z, Y, X), dtype=DTYPE)  # Flux matrix for/in "each block"
 
-P = np.zeros((Y, X), dtype=DTYPE)  # Pressure matrix
-P_wet = np.zeros((Y, X), dtype=DTYPE)  # Pressure for wetting curve
-P_drain = np.zeros((Y, X), dtype=DTYPE)  # Pressure for draining curve
-wet = np.zeros((Y, X), dtype=DTYPE)  # Logical variable for wetting mode
-drain = np.zeros((Y, X), dtype=DTYPE)  # Logical variable for draining mode
+P = np.zeros((Z, Y, X), dtype=DTYPE)  # Pressure matrix
+P_wet = np.zeros((Z, Y, X), dtype=DTYPE)  # Pressure for wetting curve
+P_drain = np.zeros((Z, Y, X), dtype=DTYPE)  # Pressure for draining curve
+wet = np.zeros((Z, Y, X), dtype=DTYPE)  # Logical variable for wetting mode
+drain = np.zeros((Z, Y, X), dtype=DTYPE)  # Logical variable for draining mode
 
-perm = np.zeros((Y, X), dtype=DTYPE)  # relative permeability
+perm = np.zeros((Z, Y, X), dtype=DTYPE)  # relative permeability
 
-saturation = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Saturation field for saving data
-pressure = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Pressure field for saving data
+saturation = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Saturation field for saving data
+pressure = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Pressure field for saving data
 
 # Fluxes fields for data saving
-QQ1 = np.zeros((Y, X + 1, REALTIME), dtype=DTYPE)  # Side fluxes
-QQ2 = np.zeros((Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
-QQ = np.zeros((Y, X, REALTIME), dtype=DTYPE)  # Fluxes for/in each block
+QQ1 = np.zeros((Z, Y, X + 1, REALTIME), dtype=DTYPE)  # Side fluxes
+QQ2 = np.zeros((Z, Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
+QQ3 = np.zeros((Z + 1, Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
+QQ = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Fluxes for/in each block
 
 # Distribution of intrinsic permeability - False if you don't want to have randomization of the intrinsic permeability
 RANDOMIZATION_INTRINSIC_PERMEABILITY = True
@@ -157,37 +164,42 @@ if LOAD_FROM_FILE:
     random_perm = np.load("random_perm.npy")
 
 elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
-    if METHOD_FILTER:
+    if METHOD_FILTER:  # TODO 3D
         random_perm = np.random.normal(0, 1, S.shape) * 0.8
         random_perm = cv2.filter2D(random_perm, -1, np.ones((KERNEL_SIZE, KERNEL_SIZE), np.float64) / KERNEL_SIZE)
 
-        sns.heatmap(random_perm)
-        plt.title("Randomized intrinsic permeability")
-        plt.savefig(f"{OUTPUT_DIR}/random_perm_filter.png")
-        plt.clf()
+        # TODO 3D
+        # sns.heatmap(random_perm)
+        # plt.title("Randomized intrinsic permeability")
+        # plt.savefig(f"{OUTPUT_DIR}/random_perm_filter.png")
+        # plt.clf()
 
         np.save("random_perm_filter.npy", random_perm)
 
     elif METHOD_INTERPOLATION:
         # Define intrinsic permeability for the blocks of the size 2.5cm
         block_par = 0.025
-        index1 = math.ceil(A / block_par)
-        index2 = math.ceil(B / block_par)
 
         interpolation_blocks = block_par / dL
-        random_perm = np.random.normal(0, 1, [index2, index1]) * 0.3
+        random_perm = np.random.normal(0, 1, [
+            math.ceil(C / block_par),
+            math.ceil(B / block_par),
+            math.ceil(A / block_par)]) * 0.3
 
-        sns.heatmap(random_perm)
-        plt.title("Randomized intrinsic permeability - before")
-        plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_before.png")
-        plt.clf()
+        # TODO 3D
+        # sns.heatmap(random_perm)
+        # plt.title("Randomized intrinsic permeability - before")
+        # plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_before.png")
+        # plt.clf()
+        print(random_perm.shape)
 
-        random_perm = cv2.resize(random_perm, None, fx=interpolation_blocks, fy=interpolation_blocks, interpolation=cv2.INTER_LINEAR)
+        random_perm = zoom(random_perm, (interpolation_blocks, interpolation_blocks, interpolation_blocks))
 
-        sns.heatmap(random_perm)
-        plt.title("Randomized intrinsic permeability - after")
-        plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_after.png")
-        plt.clf()
+        # TODO 3D
+        # sns.heatmap(random_perm)
+        # plt.title("Randomized intrinsic permeability - after")
+        # plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_after.png")
+        # plt.clf()
 
         np.save(f"{OUTPUT_DIR}/random_perm_interpolation.npy", random_perm)
 
@@ -198,10 +210,12 @@ if RANDOMIZATION_INTRINSIC_PERMEABILITY:
 else:
     nasob = np.ones_like(S)
 
+print(random_perm.shape)
 k_rnd = KAPPA * nasob
 k_rnd_sqrt = np.sqrt(k_rnd)
-k_rnd_q1 = MU_INVERSE * k_rnd_sqrt[:Y, :X - 1] * k_rnd_sqrt[:Y, 1:X]
-k_rnd_q2 = MU_INVERSE * k_rnd_sqrt[:Y - 1, :X] * k_rnd_sqrt[1:Y, :X]
+k_rnd_q1 = MU_INVERSE * k_rnd_sqrt[:Z, :Y, :X - 1] * k_rnd_sqrt[:Z, :Y, 1:X]
+k_rnd_q2 = MU_INVERSE * k_rnd_sqrt[:Z, :Y - 1, :X] * k_rnd_sqrt[:Z, 1:Y, :X]
+k_rnd_q3 = MU_INVERSE * k_rnd_sqrt[:Z - 1, :Y, :X] * k_rnd_sqrt[1:Z, :Y, :X]
 
 print("################# INTRINSIC PERMEABILITY #################")
 if RANDOMIZATION_INTRINSIC_PERMEABILITY:
@@ -220,17 +234,19 @@ S = S0_ini
 
 # Definition of top boundary condition: three possibilities can be chosen.
 if FLUX_FULL and not FLUX_MIDDLE:  # Flux q0 at whole top boundary.
-    Q2[0, :] = Q0
+    Q2[:, 0, :] = Q0
 
 elif not FLUX_FULL and FLUX_MIDDLE:  # Flux q0 at the middle at 1 cm.
-    middle = (A - 0.01) / 2
-    pom = round(middle / dL)
+    middle_x = (A - 0.01) / 2
+    middle_z = (C - 0.01) / 2
+    pom_x = round(middle_x / dL)
+    pom_z = round(middle_z / dL)
     vec = round(0.01 / dL)
 
-    Q2[0, pom: pom + vec] = Q0
+    Q2[pom_z:pom_z, 0, pom_x: pom_x + vec] = Q0
 
 else:  # Flux q0 only in the middle block.
-    Q2[0, round(X / 2)] = Q0
+    Q2[round(Z / 2), 0, round(X / 2)] = Q0
 
 retention_curve_wet = (VanGenuchtenWet(A_RC, RHO_G) if GENUCHTEN else RetentionCurveWet(A_RC)).calculate
 retention_curve_drain = (VanGenuchtenDrain(A_RC, RHO_G) if GENUCHTEN else RetentionCurveDrain(A_RC)).calculate
@@ -240,14 +256,17 @@ retention_curve_drain = (VanGenuchtenDrain(A_RC, RHO_G) if GENUCHTEN else Retent
 #   - 'drain' we start on the main draining branch.
 P = retention_curve_wet(S) if WHICH_BRANCH == "wet" else retention_curve_drain(S)
 
-bound_residual = np.ones((1, X)) * SATURATION_RESIDUAL
+bound_residual = np.ones((Z, 1, X), dtype=DTYPE) * SATURATION_RESIDUAL
 
 time_start = time.time()
 
 # Main part - saturation, pressure and flux update
 for k in tqdm(range(1, iteration+1)):
     # --------------- SATURATION UPDATE ---------------
-    Q[:Y, :X] = Q1[:Y, :X] - Q1[:Y, 1:X + 1] + Q2[:Y, :X] - Q2[1:Y + 1, :X]
+    Q[:Z, :Y, :X] = Q1[:Z, :Y, :X] - Q1[:Z, :Y, 1:X + 1] \
+                    + Q2[:Z, :Y, :X] - Q2[:Z, 1:Y + 1, :X] \
+                    + Q3[:Z, :Y, :X] - Q3[1:Z + 1, :Y, :X]
+
     S_new = S + SM * Q
 
     # If the flux is too large, then the saturation would increase over unity.
@@ -256,18 +275,19 @@ for k in tqdm(range(1, iteration+1)):
     # implementation provided for the 1D case. Thus water is returned only above. However, for all the 2D simulations
     # published or are in reviewing process, saturation had never reached unity so this implementation was not used.
     while np.amax(np.abs(S_new)) > LIM_VALUE:
-        S_over = np.zeros((Y, X))
+        print("Error - that should not happen")
+        S_over = np.zeros((Z, Y, X), dtype=DTYPE)
         S_over[S_new > LIM_VALUE] = S_new(S_new > LIM_VALUE) - LIM_VALUE
         S_new[S_new > LIM_VALUE] = LIM_VALUE
 
-        id1, id2 = np.nonzero(S_over[1:, :] > 0)
+        id1, id2, id3 = np.nonzero(S_over[:, 1:, :] > 0)
 
         for i in range(len(id1)):
-            S_new[id1[i], id2[i]] = S_new[id1[i], id2[i]] + S_over[id1[i] + 1, id2[i]]
+            S_new[id1[i], id2[i], id3[i]] = S_new[id1[i], id2[i], id3[i]] + S_over[id1[i], id2[i] + 1, id3[i]]
 
     # Bottom boundary condition residual saturation is used
-    bound_lim = np.minimum(S_new[Y - 1, :], bound_residual)
-    S_new[Y - 1, :] = np.maximum(S_new[Y - 1, :] + SM * bound_flux, bound_lim)
+    bound_lim = np.minimum(S_new[:, Y - 1:Y, :], bound_residual)
+    S_new[:, Y - 1:Y, :] = np.maximum(S_new[:, Y - 1:Y, :] + SM * bound_flux, bound_lim)
 
     # --------------- PRESSURE UPDATE ---------------
     # Hysteresis
@@ -287,30 +307,36 @@ for k in tqdm(range(1, iteration+1)):
     perm = S_new ** LAMBDA * (1 - (1 - S_new ** M_Q_inverse) ** M_Q) ** 2
     perm_sqrt = np.sqrt(perm)
 
-    Q1[:, 1:X] = k_rnd_q1 * \
-                 perm_sqrt[:Y, :X - 1] * \
-                 perm_sqrt[:Y, 1:X] * \
-                 (- ((P[:Y, 1:X] - P[:Y, :X - 1]) / dL))
+    Q1[:, :, 1:X] = k_rnd_q1 * \
+        perm_sqrt[:Z, :Y, :X - 1] * \
+        perm_sqrt[:Z, :Y, 1:X] * \
+        (- ((P[:Z, :Y, 1:X] - P[:Z, :Y, :X - 1]) / dL))
 
-    Q2[1:Y, :] = k_rnd_q2 * \
-                 perm_sqrt[:Y - 1, :X] * \
-                 perm_sqrt[1:Y, :X] * \
-                 (RHO_G - ((P[1:Y, :X] - P[:Y - 1, :X]) / dL))
+    Q2[:, 1:Y, :] = k_rnd_q2 * \
+        perm_sqrt[:Z, :Y - 1, :X] * \
+        perm_sqrt[:Z, 1:Y, :X] * \
+        (RHO_G - ((P[:Z, 1:Y, :X] - P[:Z, :Y - 1, :X]) / dL))
+
+    Q3[1:Z, :, :] = k_rnd_q3 * \
+        perm_sqrt[:Z - 1, :Y, :X] * \
+        perm_sqrt[1:Z, :Y, :X] * \
+        (RHO_G - ((P[1:Z, :Y, :X] - P[:Z - 1, :Y, :X]) / dL))
 
     S = S_new
 
     # Calculation of flux at bottom boundary.
-    bound_flux[0, :] = MU_INVERSE * k_rnd[Y - 1, :X] * perm[Y - 1, :X] * (RHO_G - ((0 - P[Y - 1, :X]) / dL))
+    bound_flux[:, 0, :] = MU_INVERSE * k_rnd[:Z, Y - 1, :X] * perm[:Z, Y - 1, :X] * (RHO_G - ((0 - P[:Z, Y - 1, :X]) / dL))
 
     # --------------- Saving data and check mass balance law ---------------
     if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
         t = round(k * dt) - 1  # calculation a real simulation time
-        saturation[:, :, t] = S
-        pressure[:, :, t] = P
+        saturation[:, :, :, t] = S
+        pressure[:, :, :, t] = P
 
-        QQ1[:, :, t] = Q1
-        QQ2[:, :, t] = Q2
-        QQ[:, :, t] = Q
+        QQ1[:, :, :, t] = Q1
+        QQ2[:, :, :, t] = Q2
+        QQ3[:, :, :, t] = Q3
+        QQ[:, :, :, t] = Q
 
         # Check the mass balance law
         # Implemented only for the case in which the flux at the top boundary is in the middle at 1cm
@@ -345,7 +371,7 @@ if PLOT_TIME:
 
     if mm > 1:  # bar3 plot for 2D semi-continuum model
         # TODO fig = figure('position',[50 50 1100 600])
-        mat = np.zeros((nn, mm))
+        mat = np.zeros((nn, mm), dtype=DTYPE)
         # TODO colormap('winter')
         # TODO colormap(flipud(colormap))
 
