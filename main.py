@@ -1,4 +1,3 @@
-# TODO Q3
 # TODO 3D graf
 # TODO předpočítat retenční křivky
 
@@ -260,6 +259,7 @@ time_start = time.time()
 
 # Main part - saturation, pressure and flux update
 for k in tqdm(range(1, iteration+1)):
+    o = time.time()
     # --------------- SATURATION UPDATE ---------------
     Q[:Z, :Y, :X] = Q1[:Z, :Y, :X] - Q1[:Z, :Y, 1:X + 1] \
                     + Q2[:Z, :Y, :X] - Q2[:Z, 1:Y + 1, :X] \
