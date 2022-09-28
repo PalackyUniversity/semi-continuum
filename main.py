@@ -7,12 +7,18 @@ from scipy.ndimage import zoom
 from tqdm import tqdm
 import plotly.express as px
 import seaborn as sns
-import numpy as np
 import math
 import time
 import cv2
 
 sns.set_theme()
+
+USE_GPU = True
+
+if USE_GPU:
+    import cupy as np
+else:
+    import numpy as np
 
 # Define constants
 REALTIME = 1  # simulation time [s]
@@ -112,6 +118,7 @@ print(("Van Genuchten" if GENUCHTEN else "Logistic") + "retention curve is used 
 
 # DTYPE = np.longdouble  # = "float128"
 DTYPE = np.double  # = "float64"
+# DTYPE = np.single  # = "float32"
 
 # Memory allocation
 S = np.zeros((Z, Y, X), dtype=DTYPE)  # Saturation matrix
@@ -187,7 +194,7 @@ elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
         # plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_before.png")
         # plt.clf()
 
-        random_perm = zoom(random_perm, (interpolation_blocks, interpolation_blocks, interpolation_blocks))
+        random_perm = zoom(random_perm.get() if USE_GPU else random_perm, (interpolation_blocks, interpolation_blocks, interpolation_blocks))
 
         # TODO 3D
         # sns.heatmap(random_perm[10])
@@ -370,15 +377,18 @@ if PLOT_TIME:
                 new_saturation.append(cv2.resize(saturation[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
                 new_pressure.append(cv2.resize(pressure[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
             saturation, pressure = np.array(new_saturation, dtype=DTYPE), np.array(new_pressure, dtype=DTYPE)
-        print(np.squeeze(saturation * 100, axis=1).shape)
+
+        saturation = np.squeeze(saturation * 100, axis=1)
+        pressure = np.squeeze(pressure, axis=1)
+
         px.imshow(
-            np.squeeze(saturation * 100, axis=1), zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
+            saturation.get() if USE_GPU else saturation, zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Saturation [%]", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
         ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.html")
 
         px.imshow(
-            np.squeeze(pressure, axis=1), animation_frame=0, title="Pressure visualization over time",
+            pressure.get() if USE_GPU else pressure, animation_frame=0, title="Pressure visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Pressure", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
         ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.html")
@@ -388,6 +398,8 @@ if PLOT_TIME:
 # Plot the basic retention curve and its linear modification defined by the scaling of the retention curve
 if PLOT_RETENTION_CURVE:
     SS = np.arange(0.001, 0.999, 0.001)
+    SS = SS.get() if USE_GPU else SS
+
     P_wet = VanGenuchtenWet(1, RHO_G).calculate(SS)
     P_drain = VanGenuchtenDrain(1, RHO_G).calculate(SS)
     plt.plot(SS, P_wet, color="r", label="Basic WB")
