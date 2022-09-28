@@ -5,6 +5,7 @@ from retention_curves import *
 from matplotlib import pyplot as plt
 from scipy.ndimage import zoom
 from tqdm import tqdm
+import plotly.express as px
 import seaborn as sns
 import numpy as np
 import math
@@ -77,7 +78,7 @@ dt = (dx_PAR ** 2) * dtBase  # time step [s], typical choice of time step parame
 RATIO = 1. / dx_PAR ** 2  # dtBase/dt=1./dx_par^2
 SM = dt / (THETA * dL)  # [s/m] parameter
 
-iteration = round(REALTIME / dt)  # number of iteratioN, t=dt*iter is REALTIME
+iteration = round(REALTIME / dt)  # number of iteration, t=dt*iter is REALTIME
 
 PLOT_TIME = True  # Set True for time plot of porous media flow
 SAVE_DATA = True  # Set True if you want to save Saturation and Pressure data
@@ -139,14 +140,14 @@ drain = np.zeros((Z, Y, X), dtype=DTYPE)  # Logical variable for draining mode
 
 perm = np.zeros((Z, Y, X), dtype=DTYPE)  # relative permeability
 
-saturation = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Saturation field for saving data
-pressure = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Pressure field for saving data
+saturation = np.zeros((REALTIME, Z, Y, X), dtype=DTYPE)  # Saturation field for saving data
+pressure = np.zeros((REALTIME, Z, Y, X), dtype=DTYPE)  # Pressure field for saving data
 
 # Fluxes fields for data saving
-QQ1 = np.zeros((Z, Y, X + 1, REALTIME), dtype=DTYPE)  # Side fluxes
-QQ2 = np.zeros((Z, Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
-QQ3 = np.zeros((Z + 1, Y + 1, X, REALTIME), dtype=DTYPE)  # Downward fluxes
-QQ = np.zeros((Z, Y, X, REALTIME), dtype=DTYPE)  # Fluxes for/in each block
+QQ1 = np.zeros((REALTIME, Z, Y, X + 1), dtype=DTYPE)  # Side fluxes
+QQ2 = np.zeros((REALTIME, Z, Y + 1, X), dtype=DTYPE)  # Downward fluxes
+QQ3 = np.zeros((REALTIME, Z + 1, Y, X), dtype=DTYPE)  # Downward fluxes
+QQ = np.zeros((REALTIME, Z, Y, X), dtype=DTYPE)  # Fluxes for/in each block
 
 # Distribution of intrinsic permeability - False if you don't want to have randomization of the intrinsic permeability
 RANDOMIZATION_INTRINSIC_PERMEABILITY = True
@@ -194,8 +195,9 @@ elif RANDOMIZATION_INTRINSIC_PERMEABILITY:
         random_perm = zoom(random_perm, (interpolation_blocks, interpolation_blocks, interpolation_blocks))
 
         # TODO 3D
-        # sns.heatmap(random_perm)
+        # sns.heatmap(random_perm[10])
         # plt.title("Randomized intrinsic permeability - after")
+        # plt.show()
         # plt.savefig(f"{OUTPUT_DIR}/random_perm_interpolation_after.png")
         # plt.clf()
 
@@ -256,7 +258,7 @@ P = retention_curve_wet(S) if WHICH_BRANCH == "wet" else retention_curve_drain(S
 bound_residual = np.ones((Z, 1, X), dtype=DTYPE) * SATURATION_RESIDUAL
 
 time_start = time.time()
-
+print()
 # Main part - saturation, pressure and flux update
 for k in tqdm(range(1, iteration+1)):
     o = time.time()
@@ -275,7 +277,7 @@ for k in tqdm(range(1, iteration+1)):
     while np.amax(np.abs(S_new)) > LIM_VALUE:
         print("Error - that should not happen")
         S_over = np.zeros((Z, Y, X), dtype=DTYPE)
-        S_over[S_new > LIM_VALUE] = S_new(S_new > LIM_VALUE) - LIM_VALUE
+        S_over[S_new > LIM_VALUE] = S_new[S_new > LIM_VALUE] - LIM_VALUE
         S_new[S_new > LIM_VALUE] = LIM_VALUE
 
         id1, id2, id3 = np.nonzero(S_over[:, 1:, :] > 0)
@@ -328,13 +330,13 @@ for k in tqdm(range(1, iteration+1)):
     # --------------- Saving data and check mass balance law ---------------
     if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
         t = round(k * dt) - 1  # calculation a real simulation time
-        saturation[:, :, :, t] = S
-        pressure[:, :, :, t] = P
+        saturation[t, :, :, :] = S
+        pressure[t, :, :, :] = P
 
-        QQ1[:, :, :, t] = Q1
-        QQ2[:, :, :, t] = Q2
-        QQ3[:, :, :, t] = Q3
-        QQ[:, :, :, t] = Q
+        QQ1[t, :, :, :] = Q1
+        QQ2[t, :, :, :] = Q2
+        QQ3[t, :, :, :] = Q3
+        QQ[t, :, :, :] = Q
 
         # Check the mass balance law
         # Implemented only for the case in which the flux at the top boundary is in the middle at 1cm
@@ -364,32 +366,27 @@ if SAVE_DATA:
 
 # Time plot in two/three dimensions
 if PLOT_TIME:
-    step = 10  # time step plot figures
-    nn, mm, kk = saturation.shape
+    if Z == 1:  # 2D or 1D
+        if X == 1:  # 1D
+            new_saturation, new_pressure = [], []
+            for t in range(REALTIME):
+                new_saturation.append(cv2.resize(saturation[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
+                new_pressure.append(cv2.resize(pressure[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
+            saturation, pressure = np.array(new_saturation, dtype=DTYPE), np.array(new_pressure, dtype=DTYPE)
 
-    if mm > 1:  # bar3 plot for 2D semi-continuum model
-        # TODO fig = figure('position',[50 50 1100 600])
-        mat = np.zeros((nn, mm), dtype=DTYPE)
-        # TODO colormap('winter')
-        # TODO colormap(flipud(colormap))
+        px.imshow(
+            saturation * 100, zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
+            labels={"x": "Length", "y": "Depth", "color": "Saturation [%]", "animation_frame": "Time [s]"},
+            color_continuous_scale='gray'
+        ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.html")
 
-        for time in np.arange(0, kk, step):
-            text = f"Time = {time} [s]   {S0}"
-            mat[:, :] = saturation[:, :, time]
-            # TODO hSurface=bar3(mat)
-            # plt.title(text)
-            # TODO axis([0 mm 0 nn 0 1])
-            # TODO view(-120, 40)
-            # TODO pause(.001)
-
-    else:  # plot for 1D semi-continuum model
-        for time in np.arange(0, kk, step):
-            xx = np.arange(dL, B, dL)
-            yy = saturation[:, 0, time]
-            # plt.plot(xx, yy, color="k")
-            # plt.title(f"Saturation in 1D: Time = {time} [s]   {S0}")
-            # TODO axis([0 b 0 1])
-            # TODO pause(.001)
+        px.imshow(
+            pressure, animation_frame=0, title="Pressure visualization over time",
+            labels={"x": "Length", "y": "Depth", "color": "Pressure", "animation_frame": "Time [s]"},
+            color_continuous_scale='gray'
+        ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.html")
+    else:
+        pass  # TODO 3D
 
 # Plot the basic retention curve and its linear modification defined by the scaling of the retention curve
 if PLOT_RETENTION_CURVE:
