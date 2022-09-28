@@ -26,7 +26,7 @@ C = A
 
 X = math.floor(A / dL)  # number of blocks in a row
 Y = math.floor(B / dL)  # number of blocks in a column
-Z = math.floor(C / dL)  # number of blocks in 3D
+Z = 1  # math.floor(C / dL)  # number of blocks in 3D
 
 G = 9.81  # acceleration due to gravity
 THETA = 0.35  # porosity
@@ -39,8 +39,8 @@ MU_INVERSE = 1 / MU
 RHO_G = RHO * G  # density of water times acceleration due to gravity
 
 Q0 = 8e-5  # flux at the top of boundary [m/s]
-FLUX_FULL = False  # set True for flux at whole top boundary, otherwise set false
-FLUX_MIDDLE = True  # set True for flux at middle of top boundary (at 1 cm), otherwise set False
+FLUX_FULL = True  # set True for flux at whole top boundary, otherwise set false
+FLUX_MIDDLE = False  # set True for flux at middle of top boundary (at 1 cm), otherwise set False
 
 # The flux from the bottom boundary is set to zero if the saturation of the respective block does not exceed a residual
 # saturation. Otherwise, equation (7) is used from the paper: https://doi.org/10.1038/s41598-021-82317-x Set residual
@@ -59,16 +59,14 @@ GENUCHTEN = True
 WHICH_BRANCH = "wet"
 
 # van Genuchten parameters for 20/30 sand
-
 M_Q = 1 - 1 / VanGenuchtenWet.N
+M_Q_inverse = 1 / M_Q
 
 # Definition of the relative permeability
 LAMBDA = 0.8
 
 TIME_INTERVAL = 1.0  # define interval in [s]
 LIM_VALUE = 0.999  # instead of unity, the value very close to unity is used
-
-M_Q_inverse = 1 / M_Q
 
 OUTPUT_DIR = "res"
 
@@ -109,11 +107,7 @@ print(f"Basic size of the block for the retention curve [cm]: {basic_block_size}
 print(f"Time step [s]:                                        {dt}")
 print(f"Width and depth of the medium respectively [m]:       {A},{B}")
 print(f"Boundary flux [m/s]:                                  {Q0}")
-
-if GENUCHTEN:
-    print("Van Genuchten retention curve is used for the simulation.")
-else:
-    print("Logistic retention curve is used for the simulation.")
+print(("Van Genuchten" if GENUCHTEN else "Logistic") + "retention curve is used for the simulation.")
 
 # DTYPE = np.longdouble  # = "float128"
 DTYPE = np.double  # = "float64"
@@ -373,15 +367,15 @@ if PLOT_TIME:
                 new_saturation.append(cv2.resize(saturation[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
                 new_pressure.append(cv2.resize(pressure[t], None, fy=1, fx=10, interpolation=cv2.INTER_NEAREST))
             saturation, pressure = np.array(new_saturation, dtype=DTYPE), np.array(new_pressure, dtype=DTYPE)
-
+        print(np.squeeze(saturation * 100, axis=1).shape)
         px.imshow(
-            saturation * 100, zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
+            np.squeeze(saturation * 100, axis=1), zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Saturation [%]", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
         ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.html")
 
         px.imshow(
-            pressure, animation_frame=0, title="Pressure visualization over time",
+            np.squeeze(pressure, axis=1), animation_frame=0, title="Pressure visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Pressure", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
         ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.html")
