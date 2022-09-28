@@ -26,7 +26,7 @@ C = A
 
 X = math.floor(A / dL)  # number of blocks in a row
 Y = math.floor(B / dL)  # number of blocks in a column
-Z = 1  # math.floor(C / dL)  # number of blocks in 3D
+Z = math.floor(C / dL)  # number of blocks in 3D
 
 G = 9.81  # acceleration due to gravity
 THETA = 0.35  # porosity
@@ -75,6 +75,7 @@ dtBase = 1e-3 * 0.25  # time step [s] for dL=0.01[m]
 dt = (dx_PAR ** 2) * dtBase  # time step [s], typical choice of time step parameter for parabolic equation
 RATIO = 1. / dx_PAR ** 2  # dtBase/dt=1./dx_par^2
 SM = dt / (THETA * dL)  # [s/m] parameter
+PRINT_MODULO = (RATIO * (1 / dtBase) * TIME_INTERVAL)
 
 iteration = round(REALTIME / dt)  # number of iteration, t=dt*iter is REALTIME
 
@@ -253,9 +254,10 @@ bound_residual = np.ones((Z, 1, X), dtype=DTYPE) * SATURATION_RESIDUAL
 
 time_start = time.time()
 print()
+
+avg = []
 # Main part - saturation, pressure and flux update
 for k in tqdm(range(1, iteration+1)):
-    o = time.time()
     # --------------- SATURATION UPDATE ---------------
     Q[:Z, :Y, :X] = Q1[:Z, :Y, :X] - Q1[:Z, :Y, 1:X + 1] \
                     + Q2[:Z, :Y, :X] - Q2[:Z, 1:Y + 1, :X] \
@@ -268,16 +270,17 @@ for k in tqdm(range(1, iteration+1)):
     # such a way that excess water is returned from where it came proportionally to the fluxes. Here we use only the
     # implementation provided for the 1D case. Thus water is returned only above. However, for all the 2D simulations
     # published or are in reviewing process, saturation had never reached unity so this implementation was not used.
-    while np.amax(np.abs(S_new)) > LIM_VALUE:
-        print("Error - that should not happen")
-        S_over = np.zeros((Z, Y, X), dtype=DTYPE)
-        S_over[S_new > LIM_VALUE] = S_new[S_new > LIM_VALUE] - LIM_VALUE
-        S_new[S_new > LIM_VALUE] = LIM_VALUE
 
-        id1, id2, id3 = np.nonzero(S_over[:, 1:, :] > 0)
-
-        for i in range(len(id1)):
-            S_new[id1[i], id2[i], id3[i]] = S_new[id1[i], id2[i], id3[i]] + S_over[id1[i], id2[i] + 1, id3[i]]
+    # while np.abs(np.amax(S_new)) > LIM_VALUE:
+    #     print("Error - that should not happen")
+    #     S_over = np.zeros((Z, Y, X), dtype=DTYPE)
+    #     S_over[S_new > LIM_VALUE] = S_new[S_new > LIM_VALUE] - LIM_VALUE
+    #     S_new[S_new > LIM_VALUE] = LIM_VALUE
+    #
+    #     id1, id2, id3 = np.nonzero(S_over[:, 1:, :] > 0)
+    #
+    #     for i in range(len(id1)):
+    #         S_new[id1[i], id2[i], id3[i]] = S_new[id1[i], id2[i], id3[i]] + S_over[id1[i], id2[i] + 1, id3[i]]
 
     # Bottom boundary condition residual saturation is used
     bound_lim = np.minimum(S_new[:, Y - 1:Y, :], bound_residual)
@@ -322,7 +325,7 @@ for k in tqdm(range(1, iteration+1)):
     bound_flux[:, 0, :] = MU_INVERSE * k_rnd[:Z, Y - 1, :X] * perm[:Z, Y - 1, :X] * (RHO_G - ((0 - P[:Z, Y - 1, :X]) / dL))
 
     # --------------- Saving data and check mass balance law ---------------
-    if k % (RATIO * (1 / dtBase) * TIME_INTERVAL) == 0:
+    if k % PRINT_MODULO == 0:
         t = round(k * dt) - 1  # calculation a real simulation time
         saturation[t, :, :, :] = S
         pressure[t, :, :, :] = P
