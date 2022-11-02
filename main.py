@@ -142,15 +142,6 @@ drain = np.zeros((n_Y, n_Z, n_X), dtype=DTYPE)  # Logical variable for draining 
 
 perm = np.zeros((n_Y, n_Z, n_X), dtype=DTYPE)  # relative permeability
 
-saturation = np.zeros((REALTIME, n_Y, n_Z, n_X), dtype=DTYPE)  # Saturation field for saving data
-pressure = np.zeros((REALTIME, n_Y, n_Z, n_X), dtype=DTYPE)  # Pressure field for saving data
-
-# Fluxes fields for data saving
-QQ_X = np.zeros((REALTIME, n_Y, n_Z, n_X + 1), dtype=DTYPE)  # Flux matrix for fluxes in x-axis
-QQ_Y = np.zeros((REALTIME, n_Y + 1, n_Z, n_X), dtype=DTYPE)  # Flux matrix for fluxes in y-axis
-QQ_Z = np.zeros((REALTIME, n_Y, n_Z + 1, n_X), dtype=DTYPE)  # Flux matrix for fluxes in z-axis
-QQ = np.zeros((REALTIME, n_Y, n_Z, n_X), dtype=DTYPE)  # Fluxes for/in each block
-
 # Distribution of intrinsic permeability - False if you don't want to have randomization of the intrinsic permeability
 RANDOMIZATION_INTRINSIC_PERMEABILITY = True
 
@@ -334,13 +325,15 @@ for k in tqdm(range(1, iteration+1)):
     # --------------- Saving data and check mass balance law ---------------
     if k % PRINT_MODULO == 0:
         t = round(k * dt) - 1  # calculation a real simulation time
-        saturation[t, :, :, :] = S
-        pressure[t, :, :, :] = P
 
-        QQ_X[t, :, :, :] = Q_X
-        QQ_Y[t, :, :, :] = Q_Y
-        QQ_Z[t, :, :, :] = Q_Z        
-        QQ[t, :, :, :] = Q
+        # Data saving
+        if SAVE_DATA:
+            np.save(f"{OUTPUT_DIR}/saturation_{t}.npy", S)
+            np.save(f"{OUTPUT_DIR}/pressure_{t}.npy", P)
+            np.save(f"{OUTPUT_DIR}/Q_X_{t}.npy", Q_X)
+            np.save(f"{OUTPUT_DIR}/Q_Y_{t}.npy", Q_Y)
+            np.save(f"{OUTPUT_DIR}/Q_Z_{t}.npy", Q_Z)
+            np.save(f"{OUTPUT_DIR}/Q_{t}.npy", Q)
 
         # Check the mass balance law
         flowed_in_real = np.sum(S) - np.sum(S0_ini)
@@ -358,18 +351,12 @@ for k in tqdm(range(1, iteration+1)):
 
 print(f"The simulation lasted: {time.time() - time_start} s")
 
-# Data saving
-if SAVE_DATA:
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.npy", saturation)
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.npy", pressure)
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq_x.npy", QQ_X)
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq_y.npy", QQ_Y)
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq_z.npy", QQ_Z)
-    np.save(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_qq.npy", QQ)
-
 # Time plot in two/three dimensions
 if PLOT_TIME:
     if n_Y == 1:  # 2D or 1D
+        saturation = [np.load(f"{OUTPUT_DIR}/saturation_{t}.npy") for t in range(REALTIME)]
+        pressure = [np.load(f"{OUTPUT_DIR}/pressure_{t}.npy") for t in range(REALTIME)]
+
         if n_X == 1:  # 1D
             new_saturation, new_pressure = [], []
             for t in range(REALTIME):
