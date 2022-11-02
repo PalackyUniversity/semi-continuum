@@ -1,5 +1,6 @@
 # TODO 3D graf
 # TODO předpočítat retenční křivky
+import json
 
 from retention_curves import *
 from matplotlib import pyplot as plt
@@ -152,6 +153,12 @@ METHOD_INTERPOLATION = True  # interpolation method
 KERNEL_SIZE = 6
 
 LOAD_FROM_FILE = False  # If you already have distribution of intrinsic permeability defined in the file
+
+with open(f"{OUTPUT_DIR}/parameters.json", "w") as f:
+    json.dump({
+        "x": X_size, "y": Y_size, "z": Z_size, "realtime": REALTIME, "dx": dL, "initial_saturation": S0,
+        "flux": {"middle": FLUX_MIDDLE, "full": FLUX_FULL, "dt": dtBase}
+    }, f)
 
 if LOAD_FROM_FILE:
     random_perm = np.load("random_perm.npy")
@@ -371,13 +378,13 @@ if PLOT_TIME:
             saturation.get() if USE_GPU else saturation, zmin=0, zmax=100, animation_frame=0, title="Saturation visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Saturation [%]", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
-        ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_saturation.html")
+        ).write_html(f"{OUTPUT_DIR}/saturation.html")
 
         px.imshow(
             pressure.get() if USE_GPU else pressure, animation_frame=0, title="Pressure visualization over time",
             labels={"x": "Length", "y": "Depth", "color": "Pressure", "animation_frame": "Time [s]"},
             color_continuous_scale='gray'
-        ).write_html(f"{OUTPUT_DIR}/dx_{dL}_initial_saturation_{S0}_pressure.html")
+        ).write_html(f"{OUTPUT_DIR}/pressure.html")
     else:
         pass  # TODO 3D
 
