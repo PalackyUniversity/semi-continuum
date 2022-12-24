@@ -3,6 +3,10 @@ matplotlib==3.5.3
 seaborn>=0.12.0
 numpy>=1.23.3
 tqdm>=4.64.1
+tifffile>=2022.8.12
 opencv-python>=4.5.5.64
 plotly>=5.9.0
-scipy>=1.9.1
+scipy>=1.9.2
+
+# If GPU is in use:
+# cupy-cuda11x
