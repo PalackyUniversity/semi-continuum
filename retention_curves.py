@@ -57,6 +57,8 @@ class VanGenuchten(Curve):
     """
     Van Genuchten retention curve.
 
+    TODO precompute retention curve
+
     ALFA: first parameter of the retention curve (the main draining or wetting branch)
     N: second parameter of the retention curve (the main draining or wetting branch)
     A: multiplication used for the scaling of the retention curve
